@@ -1,11 +1,11 @@
 package com.joelj.jenkins;
 
-import com.joelj.jenkins.changes.GitChangeLogParser;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.*;
+import hudson.plugins.git.GitChangeLogParser;
 import hudson.scm.*;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
