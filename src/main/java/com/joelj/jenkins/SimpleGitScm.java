@@ -43,7 +43,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 		this.host = host;
 		this.branch = branch;
 		this.revisionRangeEnd = revisionRangeEnd == null || revisionRangeEnd.trim().isEmpty() ? "HEAD" : revisionRangeEnd;
-		this.revisionRangeStart = revisionRangeStart == null || revisionRangeStart.trim().isEmpty() ? this.revisionRangeEnd+"^1" : revisionRangeStart;
+		this.revisionRangeStart = revisionRangeStart == null || revisionRangeStart.trim().isEmpty() ? this.revisionRangeEnd+"^" : revisionRangeStart;
 		this.expandMerges = false;
 		this.showMergeCommits = true;
 	}
