@@ -1,14 +1,28 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
 	<f:entry title="Host" field="host">
-		<f:textbox />
+		<f:textbox/>
 	</f:entry>
 	<f:entry title="Branch" field="branch">
-		<f:textbox />
+		<f:textbox/>
 	</f:entry>
 	<f:entry title="Revision Range Start" field="revisionRangeStart" description="If no value is specified, the value of end Range End is used with '^' appended.">
-		<f:textbox />
+		<f:textbox/>
 	</f:entry>
 	<f:entry title="Revision Range End" field="revisionRangeEnd" description="The revision to actually build. If no value is specified, 'HEAD' is used, which will checkout the head of the given branch.">
-		<f:textbox />
+		<f:textbox/>
 	</f:entry>
+	<f:advanced>
+		<f:entry title="Expand Merges" field="expandMerges" default="false">
+			<f:checkbox/>
+		</f:entry>
+		<f:entry title="Show Merge Commits" field="showMergeCommits" default="true">
+			<f:checkbox/>
+		</f:entry>
+		<f:entry title="Clear Workspace" field="clearWorkspace" default="false">
+			<f:checkbox/>
+		</f:entry>
+		<f:entry title="Log Git Commands" field="gitLogging" default="false">
+			<f:checkbox/>
+		</f:entry>
+	</f:advanced>
 </j:jelly>

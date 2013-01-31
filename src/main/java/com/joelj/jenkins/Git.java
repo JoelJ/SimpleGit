@@ -21,7 +21,7 @@ import java.util.*;
 public class Git {
 	private final String gitExecutable;
 	private final FilePath workspace;
-	private final TaskListener listener;
+	private final /*nullable*/ TaskListener listener;
 
 	public Git(String gitExecutable, FilePath workspace, TaskListener listener) {
 		this.gitExecutable = gitExecutable;
@@ -53,11 +53,8 @@ public class Git {
 		executeCommand("pull", remote, branch);
 	}
 
-	public void checkout(String branch, String revision) throws IOException, InterruptedException {
-		executeCommand("checkout", branch);
-		if(revision != null && !revision.isEmpty()) {
-			executeCommand("checkout", revision);
-		}
+	public void checkout(String commitish) throws IOException, InterruptedException {
+		executeCommand("checkout", commitish);
 	}
 
 	public void cloneRepo(String host) throws IOException, InterruptedException {
@@ -100,6 +97,16 @@ public class Git {
 		return executeCommand(list);
 	}
 
+	/**
+	 * Currently only being used for debugging
+	 */
+	public void revParse(String parameters) throws IOException, InterruptedException {
+		if(listener != null) {
+			String revParse = executeCommand("rev-parse", parameters);
+			listener.getLogger().println(revParse);
+		}
+	}
+
 	private static class GitFileCallable implements FilePath.FileCallable<String> {
 		private final String gitPath;
 		private final TaskListener listener;
@@ -116,7 +123,9 @@ public class Git {
 			command.add(gitPath);
 			Collections.addAll(command, this.command);
 
-			listener.getLogger().println("\t- Executing: `" + StringUtils.join(command, " ")+"`");
+			if(listener != null) {
+				listener.getLogger().println("\t- Executing: `" + StringUtils.join(command, " ")+"`");
+			}
 
 			ProcessBuilder processBuilder = new ProcessBuilder(command);
 			processBuilder.redirectErrorStream(true);

@@ -37,15 +37,20 @@ public class SimpleGitScm extends SCM implements Serializable {
 	private String revisionRangeEnd;
 	private boolean expandMerges;
 	private boolean showMergeCommits;
+	private boolean clearWorkspace;
+	private boolean gitLogging;
 
 	@DataBoundConstructor
-	public SimpleGitScm(String host, String branch, String revisionRangeStart, String revisionRangeEnd) {
+	public SimpleGitScm(String host, String branch, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging) {
 		this.host = host;
 		this.branch = branch;
 		this.revisionRangeEnd = revisionRangeEnd == null || revisionRangeEnd.trim().isEmpty() ? "HEAD" : revisionRangeEnd;
 		this.revisionRangeStart = revisionRangeStart == null || revisionRangeStart.trim().isEmpty() ? this.revisionRangeEnd+"^" : revisionRangeStart;
-		this.expandMerges = false;
-		this.showMergeCommits = true;
+
+		this.expandMerges = expandMerges;
+		this.showMergeCommits = showMergeCommits;
+		this.clearWorkspace = clearWorkspace;
+		this.gitLogging = gitLogging;
 	}
 
 	@Override
@@ -67,17 +72,26 @@ public class SimpleGitScm extends SCM implements Serializable {
 		String revisionRangeStartExpanded = environment.expand(revisionRangeStart);
 		revisionRangeStartExpanded = revisionRangeStartExpanded == null || revisionRangeStartExpanded.isEmpty() ? revisionRangeEndExpanded+"^1" : revisionRangeStartExpanded;
 
-		Git git = new Git(getDescriptor().getExecutablePath(), workspace, listener);
-		FilePath filePath = new FilePath(workspace, ".git");
-		if(filePath.exists()) {
+		if(clearWorkspace) {
+			logger.println("Clear Workspace enabled: deleting contents of " + workspace.getRemote() + ".");
+			workspace.deleteContents();
+		}
+
+		Git git = new Git(getDescriptor().getExecutablePath(), workspace, gitLogging ? listener : null);
+		FilePath gitDir = new FilePath(workspace, ".git");
+		if(gitDir.exists()) {
 			git.reset();
 			git.clean();
+			git.checkout(branchExpanded);
 			git.pull("origin", branchExpanded);
-			git.checkout(branchExpanded, revisionRangeEndExpanded);
 		} else {
 			git.cloneRepo(hostExpanded);
-			git.checkout(branchExpanded, revisionRangeEndExpanded);
 		}
+
+		git.checkout(branchExpanded);
+		git.checkout(revisionRangeEndExpanded);
+		git.revParse("HEAD");
+
 		logger.println(git.showHead());
 
 		addGitVariablesToBuild(build, git);
@@ -137,12 +151,24 @@ public class SimpleGitScm extends SCM implements Serializable {
 		return revisionRangeEnd;
 	}
 
+	@Exported
 	public boolean getExpandMerges() {
 		return expandMerges;
 	}
 
+	@Exported
 	public boolean getShowMergeCommits() {
 		return showMergeCommits;
+	}
+
+	@Exported
+	public boolean getClearWorkspace() {
+		return clearWorkspace;
+	}
+
+	@Exported
+	public boolean getGitLogging() {
+		return gitLogging;
 	}
 
 	@Override
