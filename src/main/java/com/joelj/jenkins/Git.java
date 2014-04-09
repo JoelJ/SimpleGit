@@ -45,6 +45,15 @@ public class Git {
 		executeCommand("reset", "--hard");
 	}
 
+	public void reset(String... parameters) throws IOException, InterruptedException {
+		List<String> list = new ArrayList<String>(parameters.length + 1);
+		list.add("reset");
+		list.add("--hard");
+		Collections.addAll(list, parameters);
+
+		executeCommand(list);
+	}
+
 	public void clean() throws IOException, InterruptedException {
 		executeCommand("clean", "-f", "-d", "-x");
 	}
@@ -53,12 +62,39 @@ public class Git {
 		executeCommand("pull", remote, branch);
 	}
 
+	public void fetch(String remote) throws IOException, InterruptedException {
+		executeCommand("fetch", remote);
+	}
+
 	public void checkout(String commitish) throws IOException, InterruptedException {
 		executeCommand("checkout", commitish);
 	}
 
 	public void cloneRepo(String host) throws IOException, InterruptedException {
 		executeCommand("clone", host, ".");
+	}
+
+	/**
+	 * @return Null if no remote with the given name is found. Otherwise, the URL of the given remote.
+	 */
+	public String remoteGetUrl(String remote) throws IOException, InterruptedException {
+		String remotes = executeCommand("remote", "-v");
+		Scanner scanner = new Scanner(remotes);
+		while(scanner.hasNext()) {
+			String checkingRemote = scanner.next().trim();
+			String checkingUrl = scanner.next().trim();
+			scanner.next(); // this is a throwaway, but we need to advance the cursor. This is "(fetch)" or "(pull)"
+
+			if(checkingRemote.trim().equals(remote)) {
+				return checkingUrl;
+			}
+		}
+
+		return null;
+	}
+
+	public void remoteSetUrl(String remote, String url) throws IOException, InterruptedException {
+		executeCommand("remote", "set-url", remote, url);
 	}
 
 	private String executeCommand(Collection<String> command) throws IOException, InterruptedException {

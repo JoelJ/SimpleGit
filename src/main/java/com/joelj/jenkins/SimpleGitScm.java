@@ -9,6 +9,7 @@ import hudson.plugins.git.GitChangeLogParser;
 import hudson.scm.*;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.exception.*;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.export.Exported;
@@ -80,10 +81,32 @@ public class SimpleGitScm extends SCM implements Serializable {
 		Git git = new Git(getDescriptor().getExecutablePath(), workspace, gitLogging ? listener : null);
 		FilePath gitDir = new FilePath(workspace, ".git");
 		if(gitDir.exists()) {
-			git.reset();
-			git.clean();
-			git.checkout(branchExpanded);
-			git.pull("origin", branchExpanded);
+			try {
+				git.reset();
+				git.clean();
+
+				// Let's update our remote if it has changed.
+				String remoteUrl = git.remoteGetUrl("origin");
+				if(remoteUrl != null && !remoteUrl.equals(hostExpanded)) {
+					git.remoteSetUrl("origin", hostExpanded);
+				}
+
+				git.fetch("origin");
+				git.checkout(branchExpanded);
+				git.pull("origin", branchExpanded);
+				git.reset("--hard", "origin/"+branchExpanded);
+			} catch (Exception e) {
+				logger.println("----------------------");
+				logger.println("An error has occurred while cleaning up existing repository. Cleaning workspace and checking out clean.");
+				logger.println("----------------------");
+				logger.println(e.getMessage());
+				logger.println(ExceptionUtils.getFullStackTrace(e));
+				logger.println("----------------------");
+				logger.println("----------------------");
+
+				workspace.deleteContents();
+				git.cloneRepo(hostExpanded);
+			}
 		} else {
 			git.cloneRepo(hostExpanded);
 		}
