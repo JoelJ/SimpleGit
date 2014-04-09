@@ -78,7 +78,12 @@ public class SimpleGitScm extends SCM implements Serializable {
 			workspace.deleteContents();
 		}
 
-		Git git = new Git(getDescriptor().getExecutablePath(), workspace, gitLogging ? listener : null);
+		String gitExecutablePath = getDescriptor().getExecutablePath();
+		if(gitExecutablePath == null || gitExecutablePath.isEmpty()) {
+			throw new NullPointerException("No git executable path is specified. Configure one under 'Simple Git' in the global configuration");
+		}
+
+		Git git = new Git(gitExecutablePath, workspace, gitLogging ? listener : null);
 		FilePath gitDir = new FilePath(workspace, ".git");
 		if(gitDir.exists()) {
 			try {
