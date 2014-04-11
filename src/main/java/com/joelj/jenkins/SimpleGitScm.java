@@ -75,11 +75,6 @@ public class SimpleGitScm extends SCM implements Serializable {
 		String revisionRangeEndExpanded = environment.expand(revisionRangeEnd);
 		revisionRangeEndExpanded = revisionRangeEndExpanded == null || revisionRangeEndExpanded.isEmpty() ? "HEAD" : revisionRangeEndExpanded;
 
-		if(revisionRangeEndExpanded.startsWith("origin/pr/") && revisionRangeEndExpanded.endsWith("/merge")) {
-			// Not sure why, but the GitHub plugin passes in the revision as "origin/pr/#/merge", but even with the refspec set up, it fails.
-			revisionRangeEndExpanded = revisionRangeEndExpanded.substring(0, revisionRangeEndExpanded.length() - "/merge".length());
-		}
-
 		String revisionRangeStartExpanded = environment.expand(revisionRangeStart);
 		revisionRangeStartExpanded = revisionRangeStartExpanded == null || revisionRangeStartExpanded.isEmpty() ? revisionRangeEndExpanded+"^1" : revisionRangeStartExpanded;
 
