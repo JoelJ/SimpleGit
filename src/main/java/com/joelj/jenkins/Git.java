@@ -1,16 +1,12 @@
 package com.joelj.jenkins;
 
 import hudson.FilePath;
-import hudson.Launcher;
-import hudson.model.BuildListener;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.*;
 import org.apache.commons.lang.StringUtils;
-import org.apache.log4j.lf5.util.StreamUtils;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.util.*;
 
 /**
@@ -105,6 +101,22 @@ public class Git {
 		return getWorkspace().act(new GitFileCallable(getGitExecutable(), listener, command));
 	}
 
+	/**
+	 * Adds the given refspec to the given remote for fetching.
+	 * If the given remote doesn't exist, the config file will be read, but nothing will be changed.
+	 * @param remote i.e. "origin". The remote to have the refspec added to.
+	 * @throws IOException
+	 * @throws InterruptedException
+	 */
+	public void addFetch(final String remote, final String refspec) throws IOException, InterruptedException {
+		if(listener != null) {
+			listener.getLogger().println("adding refspec '" + refspec + "' to remote '" + remote + "'");
+		}
+
+		FilePath gitDir = getWorkspace().child(".git");
+		gitDir.act(new AddFetchCallable(refspec, remote));
+	}
+
 	public String showHead() throws IOException, InterruptedException {
 		return executeCommand("log", "-n1");
 	}
@@ -177,6 +189,54 @@ public class Git {
 			}
 
 			return result;
+		}
+	}
+
+	private static class AddFetchCallable implements FilePath.FileCallable<Object> {
+		private final String refspec;
+		private final String remote;
+
+		public AddFetchCallable(String refspec, String remote) {
+			this.refspec = refspec;
+			this.remote = remote;
+		}
+
+		public Object invoke(File gitRoot, VirtualChannel virtualChannel) throws IOException, InterruptedException {
+			String lineToAdd = "fetch = " + refspec;
+
+			File configFile = new File(gitRoot, "config");
+			File newConfigFile = File.createTempFile("temp", "config");
+
+			Scanner scanner = new Scanner(configFile);
+
+			try {
+				PrintWriter write = new PrintWriter(newConfigFile);
+				try {
+					while(scanner.hasNextLine()) {
+						String line = scanner.nextLine();
+						String trimmedLine = line.trim();
+
+						if(!trimmedLine.equals(lineToAdd)) {
+							write.println(line);
+						}
+
+						if(trimmedLine.equals("[remote \"" + remote + "\"]")) {
+							write.println("\t"+lineToAdd);
+						}
+
+					}
+				} finally {
+					write.close();
+				}
+			} finally {
+				scanner.close();
+			}
+
+			if(!configFile.delete()) {
+				throw new IOException("could not delete git config file:" + configFile.getAbsolutePath());
+			}
+			FileUtils.moveFile(newConfigFile, configFile);
+			return null;
 		}
 	}
 }

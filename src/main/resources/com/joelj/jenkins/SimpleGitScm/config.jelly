@@ -2,9 +2,6 @@
 	<f:entry title="Host" field="host">
 		<f:textbox/>
 	</f:entry>
-	<f:entry title="Branch" field="branch">
-		<f:textbox/>
-	</f:entry>
 	<f:entry title="Revision Range Start" field="revisionRangeStart" description="If no value is specified, the value of end Range End is used with '^' appended.">
 		<f:textbox/>
 	</f:entry>
@@ -12,6 +9,9 @@
 		<f:textbox/>
 	</f:entry>
 	<f:advanced>
+		<f:entry title="RefSpec" field="refSpec">
+			<f:textbox/>
+		</f:entry>
 		<f:entry title="Expand Merges" field="expandMerges" default="false">
 			<f:checkbox/>
 		</f:entry>

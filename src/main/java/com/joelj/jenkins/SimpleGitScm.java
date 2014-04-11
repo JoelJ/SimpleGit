@@ -33,7 +33,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 	public static final String AUTHOR_EMAIL = "%ae";
 
 	private String host;
-	private String branch;
+	private String refSpec;
 	private String revisionRangeStart;
 	private String revisionRangeEnd;
 	private boolean expandMerges;
@@ -41,10 +41,16 @@ public class SimpleGitScm extends SCM implements Serializable {
 	private boolean clearWorkspace;
 	private boolean gitLogging;
 
+	// Deprecated fields are fields that were in older versions that we don't support anymore.
+	// But they have to remain here so jenkins doesn't puke when trying to load them
+	@SuppressWarnings("UnusedDeclaration")
+	@Deprecated
+	private transient String branch;
+
 	@DataBoundConstructor
-	public SimpleGitScm(String host, String branch, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging) {
+	public SimpleGitScm(String host, String refSpec, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging) {
 		this.host = host;
-		this.branch = branch;
+		this.refSpec = refSpec;
 		this.revisionRangeEnd = revisionRangeEnd == null || revisionRangeEnd.trim().isEmpty() ? "HEAD" : revisionRangeEnd;
 		this.revisionRangeStart = revisionRangeStart == null || revisionRangeStart.trim().isEmpty() ? this.revisionRangeEnd+"^" : revisionRangeStart;
 
@@ -65,10 +71,14 @@ public class SimpleGitScm extends SCM implements Serializable {
 		logger.println("SimpleGit: checking out");
 		EnvVars environment = build.getEnvironment(listener);
 		String hostExpanded = environment.expand(host);
-		String branchExpanded = environment.expand(branch);
 
 		String revisionRangeEndExpanded = environment.expand(revisionRangeEnd);
 		revisionRangeEndExpanded = revisionRangeEndExpanded == null || revisionRangeEndExpanded.isEmpty() ? "HEAD" : revisionRangeEndExpanded;
+
+		if(revisionRangeEndExpanded.startsWith("origin/pr/") && revisionRangeEndExpanded.endsWith("/merge")) {
+			// Not sure why, but the GitHub plugin passes in the revision as "origin/pr/#/merge", but even with the refspec set up, it fails.
+			revisionRangeEndExpanded = revisionRangeEndExpanded.substring(0, revisionRangeEndExpanded.length() - "/merge".length());
+		}
 
 		String revisionRangeStartExpanded = environment.expand(revisionRangeStart);
 		revisionRangeStartExpanded = revisionRangeStartExpanded == null || revisionRangeStartExpanded.isEmpty() ? revisionRangeEndExpanded+"^1" : revisionRangeStartExpanded;
@@ -86,39 +96,12 @@ public class SimpleGitScm extends SCM implements Serializable {
 		Git git = new Git(gitExecutablePath, workspace, gitLogging ? listener : null);
 		FilePath gitDir = new FilePath(workspace, ".git");
 		if(gitDir.exists()) {
-			try {
-				git.reset();
-				git.clean();
-
-				// Let's update our remote if it has changed.
-				String remoteUrl = git.remoteGetUrl("origin");
-				if(remoteUrl != null && !remoteUrl.equals(hostExpanded)) {
-					git.remoteSetUrl("origin", hostExpanded);
-				}
-
-				git.fetch("origin");
-				git.checkout(branchExpanded);
-				git.pull("origin", branchExpanded);
-				git.reset("--hard", "origin/"+branchExpanded);
-			} catch (Exception e) {
-				logger.println("----------------------");
-				logger.println("An error has occurred while cleaning up existing repository. Cleaning workspace and checking out clean.");
-				logger.println("----------------------");
-				logger.println(e.getMessage());
-				logger.println(ExceptionUtils.getFullStackTrace(e));
-				logger.println("----------------------");
-				logger.println("----------------------");
-
-				workspace.deleteContents();
-				git.cloneRepo(hostExpanded);
-			}
-		} else {
-			git.cloneRepo(hostExpanded);
+			attemptCheckoutFromExistingWorkspace(workspace, logger, hostExpanded, revisionRangeEndExpanded, git);
 		}
 
-		git.checkout(branchExpanded);
-		git.checkout(revisionRangeEndExpanded);
-		git.revParse("HEAD");
+		if(!gitDir.exists()) { // not an else-if because the previous if-statement potentially just deletes the workspace.
+			checkoutFromNewClone(hostExpanded, revisionRangeEndExpanded, git);
+		}
 
 		logger.println(git.showHead());
 
@@ -127,6 +110,49 @@ public class SimpleGitScm extends SCM implements Serializable {
 		FileUtils.writeStringToFile(changelogFile, git.whatChanged(revisionRangeStartExpanded, revisionRangeEndExpanded, getExpandMerges(), getShowMergeCommits()));
 
 		return true;
+	}
+
+	/**
+	 * Attempts to switch to the host/revision with the existing workspace.
+	 * if any errors occur, the workspace is cleared.
+	 */
+	private void attemptCheckoutFromExistingWorkspace(FilePath workspace, PrintStream logger, String hostExpanded, String revisionRangeEndExpanded, Git git) throws IOException, InterruptedException {
+		try {
+			// Make sure we have no changed files in the workspace
+			git.reset();
+			git.clean();
+
+			// Make sure we switch origin to the right URL if it's changed
+			String remoteUrl = git.remoteGetUrl("origin");
+			if(remoteUrl != null && !remoteUrl.equals(hostExpanded)) {
+				git.remoteSetUrl("origin", hostExpanded);
+			}
+
+			git.fetch("origin");
+			git.checkout(revisionRangeEndExpanded);
+			git.revParse("HEAD");
+		} catch (Exception e) {
+			logger.println("----------------------");
+			logger.println("An error has occurred while cleaning up existing repository. Cleaning workspace and checking out clean.");
+			logger.println("----------------------");
+			logger.println(e.getMessage());
+			logger.println(ExceptionUtils.getFullStackTrace(e));
+			logger.println("----------------------");
+			logger.println("----------------------");
+
+			workspace.deleteContents();
+		}
+	}
+
+	private void checkoutFromNewClone(String hostExpanded, String revisionRangeEndExpanded, Git git) throws IOException, InterruptedException {
+		git.cloneRepo(hostExpanded);
+		if(refSpec != null && !refSpec.isEmpty()) {
+			git.addFetch("origin", refSpec);
+		}
+
+		git.fetch("origin");
+		git.checkout(revisionRangeEndExpanded);
+		git.revParse("HEAD");
 	}
 
 	private void addGitVariablesToBuild(AbstractBuild<?, ?> build, Git git) throws IOException, InterruptedException {
@@ -165,7 +191,14 @@ public class SimpleGitScm extends SCM implements Serializable {
 	}
 
 	@Exported
+	public String getRefSpec() {
+		return refSpec;
+	}
+
+	@Exported
+	@Deprecated
 	public String getBranch() {
+		//noinspection deprecation
 		return branch;
 	}
 
