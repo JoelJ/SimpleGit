@@ -141,27 +141,11 @@ public class Git {
 	}
 
 	private String createTempFile(FilePath filePath, final String content, final String fileName, final String fileExtension, final int permissions) throws IOException, InterruptedException {
-		return filePath.act(new FilePath.FileCallable<String>() {
-			public String invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
-				File tempFile = File.createTempFile(fileName, fileExtension);
-
-				FilePath tempFilePath = new FilePath(tempFile);
-				tempFilePath.write(content, "UTF-8");
-				tempFilePath.chmod(permissions);
-
-				return tempFilePath.getRemote();
-			}
-		});
+		return filePath.act(new CreateTempFileCallable(fileName, fileExtension, content, permissions));
 	}
 
 	private void deleteRemoteFile(FilePath filePath, final String filePathToDelete) throws IOException, InterruptedException {
-		filePath.act(new FilePath.FileCallable<String>() {
-			public String invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
-				FilePath tempFilePath = new FilePath(new File(filePathToDelete));
-				tempFilePath.delete();
-				return null;
-			}
-		});
+		filePath.act(new DeleteRemoteFileCallable(filePathToDelete));
 	}
 
 	/**
@@ -308,6 +292,44 @@ public class Git {
 				throw new IOException("could not delete git config file:" + configFile.getAbsolutePath());
 			}
 			FileUtils.moveFile(newConfigFile, configFile);
+			return null;
+		}
+	}
+
+	private static class CreateTempFileCallable implements FilePath.FileCallable<String> {
+		private final String fileName;
+		private final String fileExtension;
+		private final String content;
+		private final int permissions;
+
+		public CreateTempFileCallable(String fileName, String fileExtension, String content, int permissions) {
+			this.fileName = fileName;
+			this.fileExtension = fileExtension;
+			this.content = content;
+			this.permissions = permissions;
+		}
+
+		public String invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
+			File tempFile = File.createTempFile(fileName, fileExtension);
+
+			FilePath tempFilePath = new FilePath(tempFile);
+			tempFilePath.write(content, "UTF-8");
+			tempFilePath.chmod(permissions);
+
+			return tempFilePath.getRemote();
+		}
+	}
+
+	private static class DeleteRemoteFileCallable implements FilePath.FileCallable<String> {
+		private final String filePathToDelete;
+
+		public DeleteRemoteFileCallable(String filePathToDelete) {
+			this.filePathToDelete = filePathToDelete;
+		}
+
+		public String invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
+			FilePath tempFilePath = new FilePath(new File(filePathToDelete));
+			tempFilePath.delete();
 			return null;
 		}
 	}
