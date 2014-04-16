@@ -1,6 +1,7 @@
 package com.joelj.jenkins;
 
-import hudson.FilePath;
+import com.cloudbees.jenkins.plugins.sshcredentials.*;
+import hudson.*;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import org.apache.commons.io.*;
@@ -18,11 +19,13 @@ public class Git {
 	private final String gitExecutable;
 	private final FilePath workspace;
 	private final /*nullable*/ TaskListener listener;
+	private final /*nullable*/ SSHUserPrivateKey sshCredentials;
 
-	public Git(String gitExecutable, FilePath workspace, TaskListener listener) {
+	public Git(String gitExecutable, FilePath workspace, TaskListener listener, SSHUserPrivateKey sshCredentials) {
 		this.gitExecutable = gitExecutable;
 		this.workspace = workspace;
 		this.listener = listener;
+		this.sshCredentials = sshCredentials;
 	}
 
 	public String getGitExecutable() {
@@ -55,15 +58,15 @@ public class Git {
 	}
 
 	public void pull(String remote, String branch) throws IOException, InterruptedException {
-		executeCommand("pull", remote, branch);
+		executeCommand(sshCredentials, "pull", remote, branch);
 	}
 
 	public void fetch(String remote) throws IOException, InterruptedException {
-		executeCommand("fetch", remote);
+		executeCommand(sshCredentials, "fetch", remote);
 	}
 
 	public void fetch(String remote, String refSpec) throws IOException, InterruptedException {
-		executeCommand("fetch", remote, refSpec);
+		executeCommand(sshCredentials, "fetch", remote, refSpec);
 	}
 
 	public void checkout(String commitish) throws IOException, InterruptedException {
@@ -71,7 +74,7 @@ public class Git {
 	}
 
 	public void cloneRepo(String host) throws IOException, InterruptedException {
-		executeCommand("clone", host, ".");
+		executeCommand(sshCredentials, "clone", host, ".");
 	}
 
 	/**
@@ -102,7 +105,63 @@ public class Git {
 	}
 
 	private String executeCommand(String... command) throws IOException, InterruptedException {
-		return getWorkspace().act(new GitFileCallable(getGitExecutable(), listener, command));
+		return executeCommand(null, command);
+	}
+
+	/**
+	 * Since there's slight overhead (creating temp files on the remote machine)
+	 * 	for running commands with sshCredentials,
+	 * only call this if the git command is actually going to use ssh.
+	 * Such as pull, fetch, and clone.
+	 */
+	private String executeCommand(SSHUserPrivateKey sshCredentials, String... command) throws IOException, InterruptedException {
+		if (sshCredentials != null) {
+			String sshGit = sshCredentials.getPrivateKeys().get(0);
+
+			//noinspection OctalInteger
+			String pemFileRemote = createTempFile(getWorkspace(), sshGit, "ssh", ".pem", 0700);
+
+			try {
+				String gitSshWrapperContent = "#!/bin/bash\nssh -i '" + pemFileRemote + "' \"$@\"";
+
+				//noinspection OctalInteger
+				String gitSshScriptRemote = createTempFile(getWorkspace(), gitSshWrapperContent, "gitSsh", ".sh", 0755);
+
+				try {
+					return getWorkspace().act(new GitFileCallable(getGitExecutable(), gitSshScriptRemote, listener, command));
+				} finally {
+					deleteRemoteFile(getWorkspace(), gitSshScriptRemote);
+				}
+			} finally {
+				deleteRemoteFile(getWorkspace(), pemFileRemote);
+			}
+		} else {
+			return getWorkspace().act(new GitFileCallable(getGitExecutable(), listener, command));
+		}
+	}
+
+	private String createTempFile(FilePath filePath, final String content, final String fileName, final String fileExtension, final int permissions) throws IOException, InterruptedException {
+		return filePath.act(new FilePath.FileCallable<String>() {
+			public String invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
+				File tempFile = File.createTempFile(fileName, fileExtension);
+
+				FilePath tempFilePath = new FilePath(tempFile);
+				tempFilePath.write(content, "UTF-8");
+				tempFilePath.chmod(permissions);
+
+				return tempFilePath.getRemote();
+			}
+		});
+	}
+
+	private void deleteRemoteFile(FilePath filePath, final String filePathToDelete) throws IOException, InterruptedException {
+		filePath.act(new FilePath.FileCallable<String>() {
+			public String invoke(File workspace, VirtualChannel channel) throws IOException, InterruptedException {
+				FilePath tempFilePath = new FilePath(new File(filePathToDelete));
+				tempFilePath.delete();
+				return null;
+			}
+		});
 	}
 
 	/**
@@ -161,11 +220,17 @@ public class Git {
 
 	private static class GitFileCallable implements FilePath.FileCallable<String> {
 		private final String gitPath;
+		private final String gitSshPath;
 		private final TaskListener listener;
 		private final String[] command;
 
 		public GitFileCallable(String gitPath, TaskListener listener, String... command) {
+			this(gitPath, null, listener, command);
+		}
+
+		public GitFileCallable(String gitPath, String gitSshPath, TaskListener listener, String... command) {
 			this.gitPath = gitPath;
+			this.gitSshPath = gitSshPath;
 			this.listener = listener;
 			this.command = command;
 		}
@@ -180,6 +245,9 @@ public class Git {
 			}
 
 			ProcessBuilder processBuilder = new ProcessBuilder(command);
+			if(gitSshPath != null) {
+				processBuilder.environment().put("GIT_SSH", gitSshPath);
+			}
 			processBuilder.redirectErrorStream(true);
 			processBuilder.directory(workingDirectory);
 

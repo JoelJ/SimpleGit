@@ -1,5 +1,7 @@
 package com.joelj.jenkins;
 
+import com.cloudbees.jenkins.plugins.sshcredentials.*;
+import com.cloudbees.plugins.credentials.*;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
@@ -7,6 +9,7 @@ import hudson.Launcher;
 import hudson.model.*;
 import hudson.plugins.git.GitChangeLogParser;
 import hudson.scm.*;
+import hudson.util.*;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.exception.*;
@@ -40,6 +43,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 	private boolean showMergeCommits;
 	private boolean clearWorkspace;
 	private boolean gitLogging;
+	private String credentials;
 
 	// Deprecated fields are fields that were in older versions that we don't support anymore.
 	// But they have to remain here so jenkins doesn't puke when trying to load them
@@ -48,7 +52,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 	private transient String branch;
 
 	@DataBoundConstructor
-	public SimpleGitScm(String host, String refSpec, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging) {
+	public SimpleGitScm(String host, String refSpec, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging, String credentials) {
 		this.host = host;
 		this.refSpec = refSpec;
 		this.revisionRangeEnd = revisionRangeEnd == null || revisionRangeEnd.trim().isEmpty() ? "HEAD" : revisionRangeEnd;
@@ -58,6 +62,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 		this.showMergeCommits = showMergeCommits;
 		this.clearWorkspace = clearWorkspace;
 		this.gitLogging = gitLogging;
+		this.credentials = credentials;
 	}
 
 	@Override
@@ -90,7 +95,8 @@ public class SimpleGitScm extends SCM implements Serializable {
 			throw new NullPointerException("No git executable path is specified. Configure one under 'Simple Git' in the global configuration");
 		}
 
-		Git git = new Git(gitExecutablePath, workspace, gitLogging ? listener : null);
+		SSHUserPrivateKey sshCredentials = findSshCredentials();
+		Git git = new Git(gitExecutablePath, workspace, gitLogging ? listener : null, sshCredentials);
 		FilePath gitDir = new FilePath(workspace, ".git");
 		if(gitDir.exists()) {
 			attemptCheckoutFromExistingWorkspace(workspace, logger, hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
@@ -239,6 +245,26 @@ public class SimpleGitScm extends SCM implements Serializable {
 		return gitLogging;
 	}
 
+	@Exported
+	public String getCredentials() {
+		return credentials;
+	}
+
+	public SSHUserPrivateKey findSshCredentials() {
+		if(getCredentials() != null && !getCredentials().isEmpty()) {
+			for (Credentials credentials : SystemCredentialsProvider.getInstance().getCredentials()) {
+				if(credentials instanceof SSHUserPrivateKey) {
+					SSHUserPrivateKey sshCredentials = (SSHUserPrivateKey) credentials;
+					if(sshCredentials.getId().equals(getCredentials())) {
+						return sshCredentials;
+					}
+				}
+			}
+		}
+
+		return null;
+	}
+
 	@Override
 	public DescriptorImpl getDescriptor() {
 		return (DescriptorImpl)super.getDescriptor();
@@ -277,5 +303,18 @@ public class SimpleGitScm extends SCM implements Serializable {
 			return super.newInstance(req, formData);
 		}
 
+		@SuppressWarnings("UnusedDeclaration")
+		public ListBoxModel doFillCredentialsItems() {
+			ListBoxModel items = new ListBoxModel();
+			items.add("None", "");
+
+			for (Credentials credentials : SystemCredentialsProvider.getInstance().getCredentials()) {
+				if(credentials instanceof SSHUserPrivateKey) {
+					SSHUserPrivateKey sshCredentials = (SSHUserPrivateKey) credentials;
+					items.add(sshCredentials.getDescription(), sshCredentials.getId());
+				}
+			}
+			return items;
+		}
 	}
 }
