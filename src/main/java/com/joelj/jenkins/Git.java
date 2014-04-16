@@ -62,6 +62,10 @@ public class Git {
 		executeCommand("fetch", remote);
 	}
 
+	public void fetch(String remote, String refSpec) throws IOException, InterruptedException {
+		executeCommand("fetch", remote, refSpec);
+	}
+
 	public void checkout(String commitish) throws IOException, InterruptedException {
 		executeCommand("checkout", commitish);
 	}

@@ -78,6 +78,8 @@ public class SimpleGitScm extends SCM implements Serializable {
 		String revisionRangeStartExpanded = environment.expand(revisionRangeStart);
 		revisionRangeStartExpanded = revisionRangeStartExpanded == null || revisionRangeStartExpanded.isEmpty() ? revisionRangeEndExpanded+"^1" : revisionRangeStartExpanded;
 
+		String refSpecExpanded = environment.expand(refSpec);
+
 		if(clearWorkspace) {
 			logger.println("Clear Workspace enabled: deleting contents of " + workspace.getRemote() + ".");
 			workspace.deleteContents();
@@ -91,11 +93,11 @@ public class SimpleGitScm extends SCM implements Serializable {
 		Git git = new Git(gitExecutablePath, workspace, gitLogging ? listener : null);
 		FilePath gitDir = new FilePath(workspace, ".git");
 		if(gitDir.exists()) {
-			attemptCheckoutFromExistingWorkspace(workspace, logger, hostExpanded, revisionRangeEndExpanded, git);
+			attemptCheckoutFromExistingWorkspace(workspace, logger, hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
 		}
 
 		if(!gitDir.exists()) { // not an else-if because the previous if-statement potentially just deletes the workspace.
-			checkoutFromNewClone(hostExpanded, revisionRangeEndExpanded, git);
+			checkoutFromNewClone(hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
 		}
 
 		logger.println(git.showHead());
@@ -111,7 +113,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 	 * Attempts to switch to the host/revision with the existing workspace.
 	 * if any errors occur, the workspace is cleared.
 	 */
-	private void attemptCheckoutFromExistingWorkspace(FilePath workspace, PrintStream logger, String hostExpanded, String revisionRangeEndExpanded, Git git) throws IOException, InterruptedException {
+	private void attemptCheckoutFromExistingWorkspace(FilePath workspace, PrintStream logger, String hostExpanded, String revisionRangeEndExpanded, String refSpecExpanded, Git git) throws IOException, InterruptedException {
 		try {
 			// Make sure we have no changed files in the workspace
 			git.reset();
@@ -123,7 +125,12 @@ public class SimpleGitScm extends SCM implements Serializable {
 				git.remoteSetUrl("origin", hostExpanded);
 			}
 
-			git.fetch("origin");
+			if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
+				git.fetch("origin");
+			} else {
+				git.fetch("origin", refSpecExpanded);
+			}
+
 			git.checkout(revisionRangeEndExpanded);
 			git.revParse("HEAD");
 		} catch (Exception e) {
@@ -139,13 +146,18 @@ public class SimpleGitScm extends SCM implements Serializable {
 		}
 	}
 
-	private void checkoutFromNewClone(String hostExpanded, String revisionRangeEndExpanded, Git git) throws IOException, InterruptedException {
+	private void checkoutFromNewClone(String hostExpanded, String revisionRangeEndExpanded, String refSpecExpanded, Git git) throws IOException, InterruptedException {
 		git.cloneRepo(hostExpanded);
-		if(refSpec != null && !refSpec.isEmpty()) {
-			git.addFetch("origin", refSpec);
+		//if(refSpec != null && !refSpec.isEmpty()) {
+		//	git.addFetch("origin", refSpec);
+		//}
+
+		if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
+			git.fetch("origin");
+		} else {
+			git.fetch("origin", refSpecExpanded);
 		}
 
-		git.fetch("origin");
 		git.checkout(revisionRangeEndExpanded);
 		git.revParse("HEAD");
 	}
