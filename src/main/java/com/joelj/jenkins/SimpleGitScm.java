@@ -110,6 +110,10 @@ public class SimpleGitScm extends SCM implements Serializable {
 
 		addGitVariablesToBuild(build, git);
 
+		if(changelogFile.exists()) {
+			//noinspection ResultOfMethodCallIgnored
+			changelogFile.delete();
+		}
 		FileUtils.writeStringToFile(changelogFile, git.whatChanged(revisionRangeStartExpanded, revisionRangeEndExpanded, getExpandMerges(), getShowMergeCommits()));
 
 		return true;
