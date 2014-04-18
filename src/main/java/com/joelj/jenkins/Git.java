@@ -198,11 +198,7 @@ public class Git {
 		list.add("-M");
 
 		list.add(revisionRangeStart+".."+revisionRangeEnd);
-		String result = executeCommand(list);
-		if(getListener() != null) {
-			getListener().getLogger().println(result);
-		}
-		return result;
+		return executeCommand(list);
 	}
 
 	/**
