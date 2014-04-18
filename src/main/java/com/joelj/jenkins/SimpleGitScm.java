@@ -134,7 +134,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 			if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
 				git.fetch("origin");
 			} else {
-				git.fetch("origin", refSpecExpanded);
+				git.fetch("origin", refSpecExpanded.split("\n"));
 			}
 
 			git.checkout(revisionRangeEndExpanded);
@@ -161,7 +161,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 		if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
 			git.fetch("origin");
 		} else {
-			git.fetch("origin", refSpecExpanded);
+			git.fetch("origin", refSpecExpanded.split("\n"));
 		}
 
 		git.checkout(revisionRangeEndExpanded);

@@ -10,7 +10,7 @@
 	</f:entry>
 	<f:advanced>
 		<f:entry title="RefSpec" field="refSpec">
-			<f:textbox/>
+			<f:textarea/>
 		</f:entry>
 		<f:entry title="Expand Merges" field="expandMerges" default="false">
 			<f:checkbox/>

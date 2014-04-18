@@ -65,8 +65,17 @@ public class Git {
 		executeCommand(sshCredentials, "fetch", remote);
 	}
 
-	public void fetch(String remote, String refSpec) throws IOException, InterruptedException {
-		executeCommand(sshCredentials, "fetch", remote, refSpec);
+	public void fetch(String remote, String... refSpecs) throws IOException, InterruptedException {
+		List<String> parameters = new ArrayList<String>();
+		parameters.add("fetch");
+		parameters.add(remote);
+		for (String refSpec : refSpecs) {
+			String trimmed = refSpec.trim();
+			if(!trimmed.isEmpty()) {
+				parameters.add(trimmed);
+			}
+		}
+		executeCommand(sshCredentials, parameters.toArray(new String[parameters.size()]));
 	}
 
 	public void checkout(String commitish) throws IOException, InterruptedException {
