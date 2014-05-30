@@ -12,6 +12,7 @@ import hudson.scm.*;
 import hudson.util.*;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.exception.*;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.export.Exported;
@@ -20,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.Serializable;
+import java.util.logging.*;
 
 /**
  * User: Joel Johnson
@@ -27,6 +29,8 @@ import java.io.Serializable;
  * Time: 10:43 AM
  */
 public class SimpleGitScm extends SCM implements Serializable {
+	private static final Logger logger = Logger.getLogger("SimpleGit");
+
 	public static final String NEWLINE = "%n";
 	public static final String HASH = "%H";
 	public static final String COMMITTER_NAME = "%cn";
@@ -114,6 +118,9 @@ public class SimpleGitScm extends SCM implements Serializable {
 
 				break;
 			} catch (IOException e) {
+				SimpleGitScm.logger.warning("Error while cloning or checking out from git repository:");
+				SimpleGitScm.logger.warning(ExceptionUtils.getFullStackTrace(e));
+
 				listener.error("Error while cloning or checking out from git repository:");
 				listener.error("-----------------");
 				listener.error(e.getLocalizedMessage());
