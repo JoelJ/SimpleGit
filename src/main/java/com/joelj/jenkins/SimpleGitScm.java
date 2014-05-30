@@ -124,6 +124,13 @@ public class SimpleGitScm extends SCM implements Serializable {
 				listener.error("Error while cloning or checking out from git repository:");
 				listener.error("-----------------");
 				listener.error(e.getLocalizedMessage());
+
+				Throwable t = e.getCause();
+				while(t != null) {
+					listener.error(t.getLocalizedMessage());
+					t = t.getCause();
+				}
+
 				listener.error("-----------------");
 				listener.error("");
 
