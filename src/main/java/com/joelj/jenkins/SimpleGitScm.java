@@ -12,7 +12,6 @@ import hudson.scm.*;
 import hudson.util.*;
 import net.sf.json.JSONObject;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang.exception.*;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.export.Exported;
@@ -44,6 +43,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 	private boolean clearWorkspace;
 	private boolean gitLogging;
 	private String credentials;
+	private Integer numberOfRetryClones;
 
 	// Deprecated fields are fields that were in older versions that we don't support anymore.
 	// But they have to remain here so jenkins doesn't puke when trying to load them
@@ -52,7 +52,7 @@ public class SimpleGitScm extends SCM implements Serializable {
 	private transient String branch;
 
 	@DataBoundConstructor
-	public SimpleGitScm(String host, String refSpec, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging, String credentials) {
+	public SimpleGitScm(String host, String refSpec, String revisionRangeStart, String revisionRangeEnd, boolean expandMerges, boolean showMergeCommits, boolean clearWorkspace, boolean gitLogging, String credentials, Integer numberOfRetryClones) {
 		this.host = host;
 		this.refSpec = refSpec;
 		this.revisionRangeEnd = revisionRangeEnd == null || revisionRangeEnd.trim().isEmpty() ? "HEAD" : revisionRangeEnd;
@@ -63,6 +63,8 @@ public class SimpleGitScm extends SCM implements Serializable {
 		this.clearWorkspace = clearWorkspace;
 		this.gitLogging = gitLogging;
 		this.credentials = credentials;
+
+		this.numberOfRetryClones = numberOfRetryClones;
 	}
 
 	@Override
@@ -98,12 +100,34 @@ public class SimpleGitScm extends SCM implements Serializable {
 		SSHUserPrivateKey sshCredentials = findSshCredentials();
 		Git git = new Git(gitExecutablePath, workspace, gitLogging ? listener : null, sshCredentials);
 		FilePath gitDir = new FilePath(workspace, ".git");
-		if(gitDir.exists()) {
-			attemptCheckoutFromExistingWorkspace(workspace, logger, hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
-		}
 
-		if(!gitDir.exists()) { // not an else-if because the previous if-statement potentially just deletes the workspace.
-			checkoutFromNewClone(hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
+		int numberOfRetryClones = getNumberOfRetryClones();
+		for(int i = 0; i < numberOfRetryClones; i++) {
+			try {
+				if (gitDir.exists()) {
+					attemptCheckoutFromExistingWorkspace(workspace, logger, hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
+				}
+
+				if (!gitDir.exists()) { // not an else-if because the previous if-statement potentially just deletes the workspace.
+					checkoutFromNewClone(hostExpanded, revisionRangeEndExpanded, refSpecExpanded, git);
+				}
+
+				break;
+			} catch (IOException e) {
+				listener.error("Error while cloning or checking out from git repository:");
+				listener.error("-----------------");
+				listener.error(e.getLocalizedMessage());
+				listener.error("-----------------");
+				listener.error("");
+
+				if((i+1) < numberOfRetryClones) {
+					listener.error("Cleaning and retrying (" + (i+1) + ").");
+					workspace.deleteContents();
+					listener.getLogger().println("\n");
+				} else {
+					return false;
+				}
+			}
 		}
 
 		logger.println(git.showHead());
@@ -120,43 +144,28 @@ public class SimpleGitScm extends SCM implements Serializable {
 	 * if any errors occur, the workspace is cleared.
 	 */
 	private void attemptCheckoutFromExistingWorkspace(FilePath workspace, PrintStream logger, String hostExpanded, String revisionRangeEndExpanded, String refSpecExpanded, Git git) throws IOException, InterruptedException {
-		try {
-			// Make sure we have no changed files in the workspace
-			git.reset();
-			git.clean();
+		// Make sure we have no changed files in the workspace
+		git.reset();
+		git.clean();
 
-			// Make sure we switch origin to the right URL if it's changed
-			String remoteUrl = git.remoteGetUrl("origin");
-			if(remoteUrl != null && !remoteUrl.equals(hostExpanded)) {
-				git.remoteSetUrl("origin", hostExpanded);
-			}
-
-			if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
-				git.fetch("origin");
-			} else {
-				git.fetch("origin", refSpecExpanded.split("\n"));
-			}
-
-			git.checkout(revisionRangeEndExpanded);
-			git.revParse("HEAD");
-		} catch (Exception e) {
-			logger.println("----------------------");
-			logger.println("An error has occurred while cleaning up existing repository. Cleaning workspace and checking out clean.");
-			logger.println("----------------------");
-			logger.println(e.getMessage());
-			logger.println(ExceptionUtils.getFullStackTrace(e));
-			logger.println("----------------------");
-			logger.println("----------------------");
-
-			workspace.deleteContents();
+		// Make sure we switch origin to the right URL if it's changed
+		String remoteUrl = git.remoteGetUrl("origin");
+		if(remoteUrl != null && !remoteUrl.equals(hostExpanded)) {
+			git.remoteSetUrl("origin", hostExpanded);
 		}
+
+		if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
+			git.fetch("origin");
+		} else {
+			git.fetch("origin", refSpecExpanded.split("\n"));
+		}
+
+		git.checkout(revisionRangeEndExpanded);
+		git.revParse("HEAD");
 	}
 
 	private void checkoutFromNewClone(String hostExpanded, String revisionRangeEndExpanded, String refSpecExpanded, Git git) throws IOException, InterruptedException {
 		git.cloneRepo(hostExpanded);
-		//if(refSpec != null && !refSpec.isEmpty()) {
-		//	git.addFetch("origin", refSpec);
-		//}
 
 		if(refSpecExpanded == null || refSpecExpanded.isEmpty()) {
 			git.fetch("origin");
@@ -248,6 +257,11 @@ public class SimpleGitScm extends SCM implements Serializable {
 	@Exported
 	public String getCredentials() {
 		return credentials;
+	}
+
+	@Exported
+	public int getNumberOfRetryClones() {
+		return numberOfRetryClones == null || numberOfRetryClones <= 0 ? 1 : numberOfRetryClones;
 	}
 
 	public SSHUserPrivateKey findSshCredentials() {

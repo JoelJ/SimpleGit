@@ -8,6 +8,9 @@
 	<f:entry title="Revision Range End" field="revisionRangeEnd" description="The revision to actually build. If no value is specified, 'HEAD' is used, which will checkout the head of the given branch.">
 		<f:textbox/>
 	</f:entry>
+	<f:entry title="Number of attempts to checkout/clone" field="numberOfRetryClones" description="Sometimes network errors or odd state left by previous runs prevent git from successfully checking out or cloning. The number set here will be the number of times Git will reattempt to checkout/clone.">
+		<f:textbox/>
+	</f:entry>
 	<f:advanced>
 		<f:entry title="RefSpec" field="refSpec">
 			<f:textarea/>
